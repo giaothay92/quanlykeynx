@@ -1,0 +1,6 @@
+{
+  "name": "LicenseSheet - Quản Lý Kích Hoạt Key & Đơn Hàng",
+  "description": "Dashboard quản lý kích hoạt bản quyền, sinh key tự động và đồng bộ Google Sheets theo mã đơn hàng.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
