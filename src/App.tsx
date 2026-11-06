@@ -11,8 +11,9 @@ import {
   ExternalLink,
   ShieldCheck
 } from 'lucide-react';
-import { OrderItem, WebhookLog } from './types/license';
+import { OrderItem, WebhookLog, Collaborator, KeyBatch } from './types/license';
 import { INITIAL_ORDERS } from './data/mockData';
+import { INITIAL_COLLABORATORS } from './data/mockCollaborators';
 import { 
   generateLicenseKey, 
   calculateExpirationDate, 
@@ -25,6 +26,8 @@ import { SheetsView } from './components/SheetsView';
 import { WebhookSimulator } from './components/WebhookSimulator';
 import { CustomerPortal } from './components/CustomerPortal';
 import { AnalyticsView } from './components/AnalyticsView';
+import { CollaboratorsView } from './components/CollaboratorsView';
+import { BulkKeyModal } from './components/BulkKeyModal';
 import { OrderModal } from './components/OrderModal';
 import { OrderDetailsModal } from './components/OrderDetailsModal';
 import { ScriptCodeModal } from './components/ScriptCodeModal';
@@ -59,8 +62,22 @@ export default function App() {
     return localStorage.getItem('licensesheet_url') || '';
   });
 
+  // Collaborators / Reseller management state
+  const [collaborators, setCollaborators] = useState<Collaborator[]>(() => {
+    try {
+      const saved = localStorage.getItem('licensesheet_ctv_v1');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (e) {
+      console.error(e);
+    }
+    return INITIAL_COLLABORATORS;
+  });
+
   // UI state
-  const [activeTab, setActiveTab] = useState<'orders' | 'sheets' | 'webhook' | 'portal' | 'analytics'>('orders');
+  const [activeTab, setActiveTab] = useState<'orders' | 'sheets' | 'collaborators' | 'webhook' | 'portal' | 'analytics'>('orders');
   const [selectedFilter, setSelectedFilter] = useState('all');
   const [selectedPackage, setSelectedPackage] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -69,6 +86,8 @@ export default function App() {
   // Modals
   const [isNewOrderOpen, setIsNewOrderOpen] = useState(false);
   const [isQuickActivateOpen, setIsQuickActivateOpen] = useState(false);
+  const [isBulkKeyOpen, setIsBulkKeyOpen] = useState(false);
+  const [bulkKeyTargetCtvId, setBulkKeyTargetCtvId] = useState<string>('none');
   const [isScriptModalOpen, setIsScriptModalOpen] = useState(false);
   const [selectedOrderForDetails, setSelectedOrderForDetails] = useState<OrderItem | null>(null);
 
@@ -92,6 +111,10 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('licensesheet_orders_v2', JSON.stringify(orders));
   }, [orders]);
+
+  useEffect(() => {
+    localStorage.setItem('licensesheet_ctv_v1', JSON.stringify(collaborators));
+  }, [collaborators]);
 
   useEffect(() => {
     localStorage.setItem('licensesheet_logs', JSON.stringify(webhookLogs));
@@ -333,7 +356,104 @@ export default function App() {
     }
   };
 
-  const pendingCount = orders.filter((o) => o.status === 'Pending').length;
+  // Bulk Key Generation & Batch Assignment
+  const handleSaveBatch = (batch: KeyBatch, addToOrders: boolean) => {
+    // If assigned to a CTV, update CTV totalAssignedKeys
+    if (batch.collaboratorId) {
+      setCollaborators((prev) =>
+        prev.map((c) =>
+          c.id === batch.collaboratorId
+            ? { ...c, totalAssignedKeys: c.totalAssignedKeys + batch.quantity }
+            : c
+        )
+      );
+    }
+
+    if (addToOrders) {
+      const ctv = collaborators.find((c) => c.id === batch.collaboratorId);
+      const pkgPriceMap: Record<string, number> = {
+        '1 Tháng': 99000,
+        '6 Tháng': 299000,
+        '1 Năm': 499000,
+        '2 Năm': 899000,
+        '5 Năm': 1890000,
+        'Trọn đời': 1490000,
+      };
+      const pricePerKey = pkgPriceMap[batch.packagePlan] || 499000;
+      const nowStr = new Date().toISOString();
+
+      const newOrders: OrderItem[] = batch.keys.map((key, idx) => {
+        const orderNumber = 100295 + orders.length + idx + 1;
+        const code = ctv
+          ? `${ctv.code}-${orderNumber}`
+          : `BATCH-${orderNumber}`;
+
+        return {
+          id: String(orders.length + idx + 1),
+          issued: false,
+          licenseKey: key,
+          activationDate: null,
+          expirationDate: null,
+          customerName: ctv ? `CTV ${ctv.name}` : `Đơn sỉ Lô #${batch.id.slice(0, 6)}`,
+          customerEmail: ctv ? ctv.email : 'sales@licensesheet.vn',
+          customerPhone: ctv ? ctv.phone : '',
+          packagePlan: batch.packagePlan,
+          price: pricePerKey,
+          status: 'Pending',
+          orderCode: code,
+          paymentMethod: 'VietQR / Chuyển khoản',
+          notes: `Lô key ${batch.quantity} key [${batch.packagePlan}] sinh lúc ${new Date().toLocaleTimeString('vi-VN')}${ctv ? ` - CTV: ${ctv.name}` : ''}`,
+          createdAt: nowStr,
+          collaboratorId: ctv?.id,
+          collaboratorCode: ctv?.code,
+          collaboratorName: ctv?.name,
+        };
+      });
+
+      setOrders((prev) => [...newOrders, ...prev]);
+      showToast(
+        'success',
+        'Đã sinh và lưu lô key!',
+        `Đã tạo ${batch.quantity} key [${batch.packagePlan}] và thêm vào danh sách đơn hàng.`
+      );
+    } else {
+      showToast(
+        'success',
+        'Đã sinh lô key!',
+        `Đã tạo ${batch.quantity} key [${batch.packagePlan}]. Bạn có thể sao chép hoặc tải về file TXT/CSV.`
+      );
+    }
+  };
+
+  const handleAddCollaborator = (created: Collaborator) => {
+    setCollaborators((prev) => [created, ...prev]);
+    showToast('success', 'Thêm CTV thành công', `Đã thêm cộng tác viên ${created.name} (${created.code})`);
+  };
+
+  const handleUpdateCollaborator = (updated: Collaborator) => {
+    setCollaborators((prev) => prev.map((c) => (c.id === updated.id ? updated : c)));
+    showToast('info', 'Đã cập nhật CTV', `Thông tin của ${updated.name} đã được lưu.`);
+  };
+
+  const handleDeleteCollaborator = (id: string) => {
+    const target = collaborators.find((c) => c.id === id);
+    if (!target) return;
+    setCollaborators((prev) => prev.filter((c) => c.id !== id));
+    showToast('warning', 'Đã xóa CTV', `Đã xóa cộng tác viên ${target.name}.`);
+  };
+
+  const handleAssignKeysForCtv = (ctvId: string) => {
+    setBulkKeyTargetCtvId(ctvId);
+    setIsBulkKeyOpen(true);
+  };
+
+  const handleViewCtvOrders = (ctvCode: string) => {
+    setSelectedFilter('all');
+    setSelectedPackage('all');
+    setSearchQuery(ctvCode);
+    setActiveTab('orders');
+    showToast('info', 'Lọc đơn CTV', `Đang hiển thị các đơn hàng của CTV ${ctvCode}`);
+  };
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col font-sans">
@@ -371,17 +491,22 @@ export default function App() {
         setActiveTab={setActiveTab}
         onOpenNewOrder={() => setIsNewOrderOpen(true)}
         onOpenQuickActivate={() => setIsQuickActivateOpen(true)}
+        onOpenBulkKey={() => {
+          setBulkKeyTargetCtvId('none');
+          setIsBulkKeyOpen(true);
+        }}
         onOpenScriptModal={() => setIsScriptModalOpen(true)}
         onSync={handleSync}
         isSyncing={isSyncing}
         searchQuery={searchQuery}
         setSearchQuery={setSearchQuery}
+        collaboratorsCount={collaborators.length}
       />
 
       {/* Main Container */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-6">
         {/* KPI Stat Cards (always visible on primary tabs) */}
-        {activeTab !== 'portal' && (
+        {activeTab !== 'portal' && activeTab !== 'collaborators' && (
           <StatCards
             orders={orders}
             selectedFilter={selectedFilter}
@@ -420,7 +545,20 @@ export default function App() {
           />
         )}
 
-        {/* Tab 3: Webhook Simulator */}
+        {/* Tab 3: Collaborators / CTV */}
+        {activeTab === 'collaborators' && (
+          <CollaboratorsView
+            collaborators={collaborators}
+            orders={orders}
+            onAddCollaborator={handleAddCollaborator}
+            onUpdateCollaborator={handleUpdateCollaborator}
+            onDeleteCollaborator={handleDeleteCollaborator}
+            onOpenBulkKeyForCtv={handleAssignKeysForCtv}
+            onViewCtvOrders={handleViewCtvOrders}
+          />
+        )}
+
+        {/* Tab 4: Webhook Simulator */}
         {activeTab === 'webhook' && (
           <WebhookSimulator
             orders={orders}
@@ -523,6 +661,14 @@ export default function App() {
         webAppUrl={webAppUrl}
         setWebAppUrl={setWebAppUrl}
         onTestConnection={handleTestConnection}
+      />
+
+      <BulkKeyModal
+        isOpen={isBulkKeyOpen}
+        onClose={() => setIsBulkKeyOpen(false)}
+        onSaveBatch={handleSaveBatch}
+        collaborators={collaborators}
+        preselectedCollaboratorId={bulkKeyTargetCtvId}
       />
     </div>
   );

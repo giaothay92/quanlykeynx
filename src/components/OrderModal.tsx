@@ -32,6 +32,8 @@ export const OrderModal: React.FC<OrderModalProps> = ({
   const handlePackageChange = (pkg: LicensePackage) => {
     setPackagePlan(pkg);
     if (pkg === '1 Năm') setPrice(499000);
+    else if (pkg === '2 Năm') setPrice(899000);
+    else if (pkg === '5 Năm') setPrice(1890000);
     else if (pkg === '6 Tháng') setPrice(299000);
     else if (pkg === '1 Tháng') setPrice(99000);
     else if (pkg === 'Trọn đời') setPrice(1490000);
@@ -179,6 +181,8 @@ export const OrderModal: React.FC<OrderModalProps> = ({
                 className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
               >
                 <option value="1 Năm">1 Năm (1Y-XXXX-YYYY)</option>
+                <option value="2 Năm">2 Năm (2Y-XXXX-YYYY)</option>
+                <option value="5 Năm">5 Năm (5Y-XXXX-YYYY)</option>
                 <option value="6 Tháng">6 Tháng (6M-XXXX-YYYY)</option>
                 <option value="1 Tháng">1 Tháng (1M-XXXX-YYYY)</option>
                 <option value="Trọn đời">Trọn đời (LT-XXXX-YYYY)</option>

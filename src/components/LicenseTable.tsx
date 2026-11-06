@@ -78,6 +78,10 @@ export const LicenseTable: React.FC<LicenseTableProps> = ({
       if (isExpired || days > 30) return false;
     }
 
+    if (selectedPackage && selectedPackage !== 'all') {
+      if (order.packagePlan !== selectedPackage) return false;
+    }
+
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase().trim();
       const matchId = order.id.includes(q);
@@ -85,7 +89,8 @@ export const LicenseTable: React.FC<LicenseTableProps> = ({
       const matchKey = order.licenseKey.toLowerCase().includes(q);
       const matchMachine = (order.machineId || '').toLowerCase().includes(q);
       const matchName = order.customerName.toLowerCase().includes(q);
-      return matchId || matchOrderCode || matchKey || matchMachine || matchName;
+      const matchCtv = (order.collaboratorCode || '').toLowerCase().includes(q) || (order.collaboratorName || '').toLowerCase().includes(q);
+      return matchId || matchOrderCode || matchKey || matchMachine || matchName || matchCtv;
     }
 
     return true;
@@ -160,6 +165,26 @@ export const LicenseTable: React.FC<LicenseTableProps> = ({
             >
               Sắp hết hạn
             </button>
+          </div>
+
+          {/* Package filter dropdown */}
+          <div className="flex items-center gap-1.5">
+            <select
+              value={selectedPackage}
+              onChange={(e) => {
+                setSelectedPackage(e.target.value);
+                setPage(1);
+              }}
+              className="py-1.5 px-2.5 text-xs bg-slate-50 border border-slate-200 rounded-lg text-slate-700 font-medium focus:outline-none focus:ring-1 focus:ring-emerald-500"
+            >
+              <option value="all">Tất cả gói bản quyền</option>
+              <option value="1 Năm">Gói 1 Năm (1Y-)</option>
+              <option value="2 Năm">Gói 2 Năm (2Y-)</option>
+              <option value="5 Năm">Gói 5 Năm (5Y-)</option>
+              <option value="6 Tháng">Gói 6 Tháng (6M-)</option>
+              <option value="1 Tháng">Gói 1 Tháng (1M-)</option>
+              <option value="Trọn đời">Gói Trọn đời (LT-)</option>
+            </select>
           </div>
         </div>
 
@@ -317,6 +342,13 @@ export const LicenseTable: React.FC<LicenseTableProps> = ({
                           {order.customerName && order.customerName !== `Khách hàng #${order.id}` && (
                             <div className="text-[11px] font-medium text-slate-600 mt-0.5">
                               {order.customerName}
+                            </div>
+                          )}
+                          {order.collaboratorCode && (
+                            <div className="mt-1 flex items-center gap-1">
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                                CTV: {order.collaboratorCode}
+                              </span>
                             </div>
                           )}
                         </div>

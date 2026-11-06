@@ -5,14 +5,19 @@ import { OrderItem, LicensePackage } from '../types/license';
  * const randomPart = Utilities.getUuid().toUpperCase().substring(0, 4) + "-" + Utilities.getUuid().toUpperCase().substring(4, 8);
  * const newKey = "1Y-" + randomPart;
  */
-export function generateLicenseKey(packagePlan: LicensePackage = '1 Năm'): string {
+export function generateLicenseKey(
+  packagePlan: LicensePackage = '1 Năm',
+  customPrefix?: string
+): string {
   const prefixMap: Record<LicensePackage, string> = {
-    '1 Năm': '1Y',
-    '6 Tháng': '6M',
     '1 Tháng': '1M',
+    '6 Tháng': '6M',
+    '1 Năm': '1Y',
+    '2 Năm': '2Y',
+    '5 Năm': '5Y',
     'Trọn đời': 'LT',
   };
-  const prefix = prefixMap[packagePlan] || '1Y';
+  const prefix = (customPrefix && customPrefix.trim()) ? customPrefix.trim().toUpperCase() : (prefixMap[packagePlan] || '1Y');
 
   // Generate UUID-like hex characters
   const getRandomHex = (len: number) => {
@@ -30,12 +35,35 @@ export function generateLicenseKey(packagePlan: LicensePackage = '1 Năm'): stri
 }
 
 /**
- * Tính ngày hết hạn dựa theo gói bản quyền
+ * Sinh danh sách key hàng loạt đảm bảo không trùng lặp
+ */
+export function generateBulkKeys(
+  count: number,
+  packagePlan: LicensePackage = '1 Năm',
+  customPrefix?: string
+): string[] {
+  const keySet = new Set<string>();
+  const maxAttempts = count * 10;
+  let attempts = 0;
+
+  while (keySet.size < count && attempts < maxAttempts) {
+    keySet.add(generateLicenseKey(packagePlan, customPrefix));
+    attempts++;
+  }
+  return Array.from(keySet);
+}
+
+/**
+ * Tính ngày hết hạn dựa theo gói bản quyền (1 Tháng, 6 Tháng, 1 Năm, 2 Năm, 5 Năm, Trọn đời)
  */
 export function calculateExpirationDate(actDate: Date, packagePlan: LicensePackage = '1 Năm'): Date {
   const expDate = new Date(actDate.getTime());
   if (packagePlan === '1 Năm') {
     expDate.setFullYear(actDate.getFullYear() + 1);
+  } else if (packagePlan === '2 Năm') {
+    expDate.setFullYear(actDate.getFullYear() + 2);
+  } else if (packagePlan === '5 Năm') {
+    expDate.setFullYear(actDate.getFullYear() + 5);
   } else if (packagePlan === '6 Tháng') {
     expDate.setMonth(actDate.getMonth() + 6);
   } else if (packagePlan === '1 Tháng') {
